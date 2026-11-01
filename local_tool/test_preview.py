@@ -137,7 +137,7 @@ class PreviewChecks(unittest.TestCase):
         source={'title':'字幕检查','subtitles':[{'language':'zh','ext':'json3','data':'{"events":[{"segs":[{"utf8":"字幕正文"}]}]}'}]}
         with tempfile.TemporaryDirectory() as directory:
             result=export_transcript(source,{'kind':'video'},directory)
-            self.assertEqual(result['origin'],'平台字幕')
+            self.assertTrue(result['origin'].startswith('平台字幕'))
             self.assertEqual(result['path'].read_text(encoding='utf-8-sig').strip(),'字幕正文')
             self.assertEqual([p.suffix for p in Path(directory).iterdir()],['.txt'])
 

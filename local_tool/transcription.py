@@ -136,7 +136,7 @@ def transcribe_wav(path,title='',log=lambda s:None,progress=lambda a,b:None,lang
             progress(segment.end,info.duration)
     text='\n'.join(lines).strip()
     if not text:raise ValueError('未识别出清晰语音，可尝试“读取画面字幕”并框选字幕区域。')
-    return {'text':text,'language':info.language,'events':events,'uncertain':uncertain,'model':'Whisper large-v3'}
+    return {'text':text,'language':info.language,'events':events,'uncertain':uncertain,'model':'Whisper large-v3','processed_seconds':info.duration}
 
 def _chinese_speech(samples,log,progress):
     global _chinese
@@ -157,7 +157,7 @@ def _chinese_speech(samples,log,progress):
             done=segment['end']/16000;duration=len(samples)/16000
             log(f'中文语音识别：{done:.0f} / {duration:.0f} 秒');progress(done,duration)
     if not lines:raise ValueError('没有识别出清晰语音，可改用画面字幕。')
-    return {'text':'\n'.join(lines),'language':language,'events':events,'uncertain':[],'model':'SenseVoiceSmall'}
+    return {'text':'\n'.join(lines),'language':language,'events':events,'uncertain':[],'model':'SenseVoiceSmall','processed_seconds':len(samples)/16000}
 
 def ocr_engine():
     global _ocr
@@ -180,7 +180,8 @@ def locate_subtitles(cap,engine,duration):
         if output.txts is None:continue
         for text,score,box in zip(output.txts,output.scores,output.boxes):
             text=simplified(text)
-            if score<.85 or len(re.sub(r'\W','',text))<3 or re.fullmatch(r'[\d\s.,%]+',text):continue
+            from learning_text import glossary_line
+            if glossary_line(text) or score<.85 or len(re.sub(r'\W','',text))<3 or re.fullmatch(r'[\d\s.,%]+',text):continue
             xs=[p[0]/scale/w for p in box];ys=[p[1]/scale/h+.35 for p in box]
             height=max(ys)-min(ys);center=(sum(xs)/4,sum(ys)/4)
             if height<.012 or abs(center[0]-.5)>.3:continue
@@ -196,9 +197,10 @@ def locate_subtitles(cap,engine,duration):
     ys=sorted(c['y'] for c in best);heights=sorted(c['height'] for c in best);pad=heights[len(heights)//2]*.7+.008
     return [0,float(max(0,ys[len(ys)//10]-pad)),1,float(min(1,ys[min(len(ys)-1,len(ys)*9//10)]+pad))]
 
-def screen_text(path,roi=None,log=lambda s:None,progress=lambda a,b:None,*,bilingual=False,start_at=0,previous=None,checkpoint=None,cancel=None):
+def screen_text(path,roi=None,log=lambda s:None,progress=lambda a,b:None,*,bilingual=False,start_at=0,end_at=None,previous=None,checkpoint=None,cancel=None):
     """Read only the selected subtitle band and merge repeated subtitle frames."""
     import cv2
+    from learning_text import same_screen_caption
     region=subtitle_roi(roi)
     cap=cv2.VideoCapture(str(path))
     if not cap.isOpened():raise ValueError('视频画面无法读取，请重新解析。')
@@ -213,7 +215,7 @@ def screen_text(path,roi=None,log=lambda s:None,progress=lambda a,b:None,*,bilin
             entries=[entry for entry in frame['entries'] if entry['text'] not in stationary]
             if not entries:continue
             text='\n'.join(e['text'] for e in sorted(entries,key=lambda v:v['y']));score=sum(e['score'] for e in entries)/len(entries)
-            if groups and frame['time']-groups[-1]['end']<=step*2 and (difflib.SequenceMatcher(None,text,groups[-1]['text']).ratio()>=.82 or text in groups[-1]['text'] or groups[-1]['text'] in text):
+            if groups and frame['time']-groups[-1]['end']<=step*2 and same_screen_caption(text,groups[-1]['text']):
                 old=groups[-1];old['end']=frame['time']
                 if score*len(text)>old['score']*len(old['text']):old.update(text=text,score=score)
             else:groups.append({'start':frame['time'],'end':frame['time'],'text':text,'score':score})
@@ -225,7 +227,8 @@ def screen_text(path,roi=None,log=lambda s:None,progress=lambda a,b:None,*,bilin
                 log('正在定位画面中的字幕行…');region=locate_subtitles(cap,engine,duration)
                 if region is None:raise ValueError('没有检测到稳定的画面字幕，请在预览页框选字幕位置。')
                 if bilingual:region=[region[0],max(0,region[1]-.025),region[2],min(1,region[3]+.115)]
-            for index in range(max(0,int(start_at/step)),int(duration/step)+1):
+            stop=min(duration,end_at) if end_at is not None else duration
+            for index in range(max(0,int(start_at/step)),int(stop/step)+1):
                 if cancel is not None and cancel.is_set():
                     if checkpoint:checkpoint(grouped(),max(start_at,index*step-step),region)
                     raise InterruptedError('已停止，已完成的字幕进度会保留。')
@@ -278,7 +281,7 @@ def screen_text(path,roi=None,log=lambda s:None,progress=lambda a,b:None,*,bilin
         groups=grouped()
         text='\n'.join(group['text'] for group in groups).strip()
         if not text:raise ValueError('没有读到清晰的字幕，请框住中英两行字幕后重试。')
-        if checkpoint:checkpoint(groups,duration,region)
+        if checkpoint:checkpoint(groups,min(duration,end_at) if end_at is not None else duration,region)
         return {'text':text,'language':'multi','events':groups,'model':'RapidOCR','uncertain':[],'roi':region}
     groups=[]
     for frame in frames:

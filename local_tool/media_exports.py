@@ -182,7 +182,7 @@ def _video_for_ocr(source,item,target,log,progress):
     try:
         address=server.register({**source,'preview':preview},{**item,'preview':preview})+'video'
         args=[imageio_ffmpeg.get_ffmpeg_exe(),'-v','error','-nostdin','-y','-rw_timeout','30000000','-i',address,
-            '-map','0:v:0','-an','-c:v','copy','-f','matroska','-progress','pipe:1','-nostats',str(target)]
+            '-map','0:v:0','-an','-vf',"fps=2.5,scale=w='min(1280,iw)':h=-2",'-c:v','libx264','-preset','ultrafast','-crf','20','-g','1','-f','matroska','-progress','pipe:1','-nostats',str(target)]
         log('正在临时读取视频画面，识别结束后自动清理…')
         with tempfile.TemporaryFile(dir=_work_dir()) as errors:
             process=subprocess.Popen(args,stdout=subprocess.PIPE,stderr=errors,text=True,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
@@ -199,44 +199,12 @@ def _video_for_ocr(source,item,target,log,progress):
     finally:server.close()
 
 def export_transcript(source,item,directory,log=lambda s:None,progress=lambda a,b:None):
-    from transcription import simplified,transcribe_wav,screen_text,cross_check
+    from subtitle_pipeline import extract_captions
+    from transcription import simplified
     from media_ranges import subtitle_roi
-    if item.get('kind') not in ('video','ytdlp'):raise ValueError('请选择视频资源后提取文案。')
-    method=item.get('_transcript_method',source.get('_transcript_method','auto'))
-    if method not in ('auto','speech','screen'):raise ValueError('文案识别方式无效。')
-    if method=='auto':
-        for track in (source.get('subtitles') or [])[:12]:
-            try:
-                log('正在读取平台字幕（'+track.get('language','')+'），中文统一转为简体…')
-                text=simplified(caption_text(_fetch_track(track),track.get('ext','vtt')))
-                if not text:continue
-                target=unique_target(directory,source.get('title','素材'),' - 字幕文本.txt')
-                target.write_text(text+'\n',encoding='utf-8-sig')
-                return {'path':target,'origin':'平台自动字幕' if track.get('automatic') else '平台字幕','language':track.get('language')}
-            except (ValueError,OSError,ET.ParseError):continue
-    with tempfile.TemporaryDirectory(prefix='local-video-text-',dir=_work_dir()) as temp:
-        result=None
-        duration=float(source.get('duration') or 0)
-        if method=='screen' or method=='auto' and 0<duration<=1200:
-            try:
-                video=Path(temp)/'frames.mkv';_video_for_ocr(source,item,video,log,progress)
-                result=screen_text(video,subtitle_roi(item.get('_subtitle_roi')),log,progress)
-                suffix=' - 文案（画面字幕）.txt';origin='画面字幕识别'
-            except (ValueError,OSError):
-                if method=='screen':raise
-                log('未取得清晰的画面字幕，继续使用高精度语音识别…')
-        if result is None:
-            wav=Path(temp)/'speech.wav';_audio_to(source,item,wav,wav=True,log=log,progress=progress)
-            result=transcribe_wav(wav,source.get('title',''),log,progress)
-            suffix=' - 文案（高精度语音）.txt';origin='本地高精度语音识别'
-        elif method=='auto':
-            log('正在用语音补全文案，并按画面字幕核对具体用词…')
-            wav=Path(temp)/'speech.wav';_audio_to(source,item,wav,wav=True,log=log,progress=progress)
-            spoken=transcribe_wav(wav,source.get('title',''),log,progress)
-            text,corrections=cross_check(spoken['text'],result['text'])
-            result={**spoken,'text':text,'model':result['model']+' + '+spoken['model'],'corrections':corrections}
-            suffix=' - 文案（字幕核对）.txt';origin='字幕与语音交叉核对'
-    target=unique_target(directory,source.get('title','视频'),suffix)
+    if item.get('kind') not in ('video','ytdlp'):raise ValueError('请选择视频资源后提取字幕。')
+    with tempfile.TemporaryDirectory(prefix='subtitle-',dir=_work_dir()) as temporary:
+        result=extract_captions(source,item,Path(temporary),log,progress,learning=bool(item.get('_english_learning')),roi=subtitle_roi(item.get('_subtitle_roi')))
+    target=unique_target(directory,source.get('title','视频'),' - 字幕文本.txt')
     target.write_text(simplified(result['text'])+'\n',encoding='utf-8-sig')
-    return {'path':target,'origin':origin,'language':result.get('language'),'uncertain_count':len(result.get('uncertain',[])),'model':result['model']}
-
+    return {'path':target,'origin':'；'.join(result['origins']),'language':result['language'],'captions':result}

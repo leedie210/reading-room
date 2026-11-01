@@ -95,13 +95,68 @@ def collapse(cues):
         result.append(cue)
     return result
 
+def glossary_line(text):
+    return bool(re.search(r'(?:^|\s)\d{1,3}[.、)]?\s*[A-Za-z][A-Za-z -]*\s+(?:n|v|adj|adv|vt|vi|prep|pron|conj)\s*[.．:：]', text, re.I)
+                or re.search(r'\b[A-Za-z-]+\s+(?:n|v|adj|adv|vt|vi|prep|pron|conj)\s*[.．:：]?\s*[\u4e00-\u9fff]',text,re.I))
+
+def same_screen_caption(left,right):
+    def parts(text):
+        lines=[line.strip() for line in text.splitlines() if not glossary_line(line)]
+        return [' '.join(line for line in lines if bool(re.search(r'[\u4e00-\u9fff]',line))==chinese) for chinese in (False,True)]
+    for a,b in zip(parts(left),parts(right)):
+        if a==b:continue
+        if not a or not b:return False
+        if min(len(a),len(b))>=20 and (a.startswith(b) or b.startswith(a)):continue
+        if min(len(a),len(b))>=25 and difflib.SequenceMatcher(None,a,b).ratio()>=.97:continue
+        return False
+    return True
+
+def cue_metrics(cues, duration):
+    words=sum(len(re.findall(r"[A-Za-z]+(?:['’][A-Za-z]+)?",c['text'])) for c in cues)
+    intervals=sorted((max(0,c['start']),min(duration,c['end'])) for c in cues if c.get('start') is not None and c.get('end') is not None)
+    covered=0;last=0
+    for start,end in intervals:
+        covered+=max(0,end-max(start,last));last=max(last,end)
+    return {'words':words,'words_per_minute':words*60/duration if duration else 0,'observed_ratio':covered/duration if duration else 0,'cues':len(cues)}
+
+def complete_english(cues, duration):
+    if not cues:return False
+    if not duration or duration<45:return True
+    metrics=cue_metrics(cues,duration)
+    # Screen time is not speech coverage: a static three-word title is not 30 s of transcript.
+    return metrics['words_per_minute']>=60 and metrics['observed_ratio']>=.65 and len(cues)>=duration/18
+
+def reusable_document(document, duration, method='auto'):
+    if not document or not document.get('extraction_complete') or not document.get('rows'):return False
+    if method=='speech' and document.get('extraction_method')!='speech':return False
+    if document.get('extraction_version')==2:return bool(document.get('quality',{}).get('complete'))
+    rows=document['rows']
+    if any(glossary_line(r.get('zh','')) for r in rows):return False
+    cues=[{'start':r.get('start'),'end':r.get('end'),'text':r.get('en','')} for r in rows]
+    return complete_english(cues,duration) and not any((r.get('end') or 0)-(r.get('start') or 0)>45 for r in rows)
+
+def translation_batches(rows):
+    offset=0
+    while offset<len(rows):
+        batch=[];characters=0
+        for row in rows[offset:offset+8]:
+            if batch and characters+len(row['en'])>900:break
+            batch.append(row);characters+=len(row['en'])
+        yield offset,batch
+        offset+=len(batch)
+
 def ocr_languages(events):
     english, chinese = [], []
     for event in events:
         en, zh = [], []
-        for line in event['text'].splitlines():
+        lines=event['text'].splitlines()
+        vocabulary_panel=any(glossary_line(line) for line in lines)
+        for line in lines:
+            if glossary_line(line):continue
             if re.search(r'[\u4e00-\u9fff]', line): zh.append(line)
             elif re.search(r'[A-Za-z]', line): en.append(line)
+        # A lexical panel is not evidence of translated subtitles (even its channel label).
+        if vocabulary_panel:zh=[]
         for lines, output in ((en, english), (zh, chinese)):
             if lines: output.append({'start': event['start'], 'end': event['end'] + .4, 'text': ' '.join(lines)})
     return collapse(english), collapse(chinese)
@@ -109,7 +164,9 @@ def ocr_languages(events):
 def make_rows(english, chinese, english_origin, chinese_origin):
     merged, pending = [], None
     for cue in collapse(english):
-        if pending and (cue.get('start') is None or pending.get('end') is None or cue['start'] - pending['end'] < 3):
+        adjacent=pending and cue.get('start') is not None and pending.get('end') is not None and cue['start']-pending['end']<1.2
+        bounded=pending and len(pending['text'])+len(cue['text'])<360 and (cue.get('end') is None or pending.get('start') is None or cue['end']-pending['start']<=18)
+        if pending and adjacent and bounded:
             pending['text'] += ' ' + cue['text']; pending['end'] = cue.get('end')
         else:
             if pending: merged.append(pending)
@@ -137,7 +194,7 @@ def make_rows(english, chinese, english_origin, chinese_origin):
                'zh_cue_ids': selected}
         # One Chinese interval can correspond to multiple English sentences.
         # Keep this as one bilingual reading paragraph rather than repeating it.
-        if rows and selected and rows[-1]['zh_cue_ids'] == selected:
+        if rows and selected and rows[-1]['zh_cue_ids'] == selected and len(rows[-1]['en'])+len(en)<360 and (row['end'] or 0)-(rows[-1]['start'] or 0)<=18:
             previous = rows[-1]; previous['en'] += ' ' + en; previous['end'] = row['end']
             previous['alignment'] = 'paragraph'
         else: rows.append(row)

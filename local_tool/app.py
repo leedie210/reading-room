@@ -82,7 +82,7 @@ class App:
         self.preview_button=ttk.Button(nav,text='播放预览 / 选择片段',command=self.preview_selected);self.preview_button.pack(side='left')
         self.download_button=ttk.Button(nav,text='下载完整视频',command=self.save);self.download_button.pack(side='left',padx=6)
         self.audio_button=ttk.Button(nav,text='只提取音频',command=lambda:self.save('audio'));self.audio_button.pack(side='left')
-        self.transcript_button=ttk.Button(nav,text='只提取文案',command=lambda:self.save('transcript'));self.transcript_button.pack(side='left',padx=6)
+        self.transcript_button=ttk.Button(nav,text='只提取字幕',command=lambda:self.save('transcript'));self.transcript_button.pack(side='left',padx=6)
         ttk.Button(nav,text='打开原视频',command=self.open_source).pack(side='right')
         clips=ttk.Frame(outer);clips.pack(fill='x',pady=(0,10))
         ttk.Label(clips,text='截取：从').pack(side='left');ttk.Entry(clips,textvariable=self.clip_start,width=15).pack(side='left',padx=5)
@@ -254,13 +254,7 @@ class App:
         if self.busy:self.status.set('当前任务仍在处理，请稍后再操作。');return
         mode=item.get('_export_mode','video');destination=self.destination.get();cookies=self.cookie_file
         material_id=source.get('_material_id')
-        if material_id and mode=='transcript' and self.library.get(material_id)['english']:
-            try:
-                self.learning.start(source,item,item.get('_subtitle_roi'))
-                self.open_preview_page(source,item,reading=True)
-                self.status.set('正在生成双语阅读，进度与已完成部分可在阅读页查看。')
-            except ValueError as error:self.status.set(str(error))
-            return
+        if mode=='transcript':item={**item,'_english_learning':bool(material_id and self.library.get(material_id)['english'])}
         self.status.set('正在准备处理视频…')
         def work():
             log=lambda text:self.events.put(('status',text));progress=lambda a,b:self.events.put(('export_progress',(a,b)))
@@ -278,7 +272,12 @@ class App:
                     self.library.archive_metadata(material_id)
             if isinstance(result,dict):
                 warning=f'；有 {result["uncertain_count"]} 个低置信度片段建议对照原视频' if result.get('uncertain_count') else ''
-                self.status.set(result['origin']+'，已保存：'+str(result['path'])+warning)
+                self.status.set(result['origin']+'，字幕已保存：'+str(result['path'])+warning)
+                if mode=='transcript' and material_id and self.library.get(material_id)['english'] and result.get('captions'):
+                    try:
+                        self.learning.start(source,item,item.get('_subtitle_roi'),captions=result['captions'])
+                        self.status.set('字幕已独立保存；学习材料正在后台归档，可稍后从英语书架查看。')
+                    except ValueError as error:self.status.set('字幕已保存；学习归档未启动：'+str(error))
             else:self.status.set('已保存：'+str(result))
         self.job(work,done)
 
@@ -289,7 +288,7 @@ class App:
         if not material_id:return
         if not self.english.get():self.learning.cancel(material_id)
         self.library.classify(material_id,self.english.get())
-        self.status.set('已归入英语学习；提取文案时会生成双语阅读并归档到知识库。' if self.english.get() else '已取消英语分类，已有学习文件保留。')
+        self.status.set('已归入英语学习；提取字幕会先保存文件，再后台归档到知识库，不自动打开网页。' if self.english.get() else '已取消英语分类，已有学习文件保留。')
 
     def open_reading(self):
         if not self.current:return

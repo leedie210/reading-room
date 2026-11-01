@@ -242,7 +242,9 @@ class PreviewServer:
                             if body.get('english') is False:owner.learning.cancel(material_id)
                             data=owner.library.classify(material_id,body.get('english'))
                         elif route=='learning-start':
-                            if not (owner.library.document(material_id) or {}).get('extraction_complete'):owner.restore_session(session)
+                            from learning_text import reusable_document
+                            old=owner.library.document(material_id)
+                            if not reusable_document(old,float(session['source'].get('duration') or 0),session['item'].get('_transcript_method','auto')):owner.restore_session(session)
                             data=owner.learning.start(session['source'],session['item'],subtitle_roi(body.get('roi')))
                         elif route=='learning-cancel':data=owner.learning.cancel(material_id)
                         elif route=='analyze-all':data=owner.learning.analyze_all(material_id)

@@ -46,8 +46,8 @@ py -3.13 -m venv .venv
 ## 使用流程
 
 1. 粘贴视频链接或分享文案，点击“解析视频”，先预览再决定保存什么。视频已加载后，左方向键每次后退 5 秒；编辑输入框时保留正常光标操作。
-2. 勾选“作为英语学习素材”，进入双语阅读。优先使用原视频字幕和译文，缺失部分才识别或补译。
-3. 阅读页的“字幕与解析”内可生成阅读文本、提前生成本篇解析；关闭解析弹窗不会取消后台工作。
+2. 点击“只提取字幕”会按所选方式识别并保存独立 TXT，不自动跳转网页。未勾选英语学习时，不写入英语书架或 Obsidian。
+3. 如需学习，勾选“作为英语学习素材”后提取字幕，会复用同一次识别结果在后台归档。稍后主动打开英语书架或阅读页；“字幕与解析”内也可生成阅读文本和提前生成解析。
 4. 框选同一英文句段里的文字，选择“存为词汇”或“存为句段”。默认收起目录，顶部可展开。
 5. 在“我的书架／重点词汇／标记句段”切换。标记直接保存在本机，不依赖语言模型。
 
@@ -96,6 +96,8 @@ $env:READING_ROOM_VAULT = Join-Path $HOME 'Documents\EnglishVault'
 
 Whisper large-v3 是大型下载。离线模型和在线模型都可能误译或误判语法，需对照原文；没有“所有视频零错字”的保证。原中文可用时优先保留。
 
+普通字幕的自动模式优先读取完整平台字幕，缺失时识别全片原声。英语学习的自动模式还会检查画面原有中英字幕；中间的单词释义和静态标题不算完整文稿，定位失败时会再检查画面底部。画面字幕通过检查后才识别整片，仍需人工校对；缺少原字幕时才使用原声与模型补译。显式选择语音或画面模式时保留该选择。识别与中文补译分开保存，已有翻译从缓存恢复。
+
 ## 隐私与网络
 
 - 默认只监听 `127.0.0.1`，页面带临时访问 token，写操作检查同源。
@@ -110,7 +112,8 @@ Whisper large-v3 是大型下载。离线模型和在线模型都可能误译或
 
 ```powershell
 cd local_tool
-..\.venv\Scripts\python.exe -m unittest test_learning test_preview test_video_app test_analysis_jobs test_reading_marks -q
+..\.venv\Scripts\python.exe -m unittest test_learning test_preview test_video_app test_analysis_jobs test_reading_marks test_subtitle_pipeline -q
+node test_transcript_action.cjs
 ```
 
 测试使用合成素材、临时数据库和本地媒体，模型调用以替身验证排队与持久化；不把此类测试描述为语言准确度验证。真实平台可用性、模型质量及人工界面验收另行进行。锁定的基础验证环境见 `requirements-tested.txt`。

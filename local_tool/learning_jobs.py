@@ -9,7 +9,7 @@ from collections import deque
 from contextlib import ExitStack
 from pathlib import Path
 from media_core import ROOT
-from learning_text import parse_cues, ocr_languages, make_rows, annotations, wordlists
+from learning_text import parse_cues, ocr_languages, make_rows, annotations, wordlists, reusable_document, translation_batches
 from learning_model import ModelClient, cache_key, load_config
 
 class LearningService:
@@ -33,8 +33,11 @@ class LearningService:
 
     def view(self, material_id):
         document = self.library.document(material_id)
+        material=self.library.get(material_id)
         if document:
             document = copy.deepcopy(document)
+            if document.get('extraction_complete') and not reusable_document(document,float(material.get('duration') or 0)):
+                document.update(extraction_complete=False,status='needs-reextract',status_label='旧识别结果未通过完整性检查，请重新提取字幕；原记录与个人标记保留。')
             for row in document.get('rows', []): row['annotations'] = annotations(row['en'])
         config = load_config()
         if document:
@@ -46,7 +49,7 @@ class LearningService:
         batch.update(done=sum(bool(row.get('analysis')) for row in rows), total=len(rows))
         if rows and batch['done'] == batch['total']:
             batch.update(status='done', message=f'本篇解析已全部保存：{len(rows)}/{len(rows)}。')
-        return {'material': self.library.get(material_id), 'document': document, 'job': self.state(material_id), 'analysis_job': batch,
+        return {'material': material, 'document': document, 'job': self.state(material_id), 'analysis_job': batch,
                 'provider': '离线模型（生成内容需校对）' if config['mode'] == 'local' else config.get('model', '在线模型'),
                 'wordlists': wordlists()['sources']}
 
@@ -56,7 +59,9 @@ class LearningService:
             job.update(values)
             self.library.cache_put('learning-job:' + key, {k: v for k, v in job.items() if k != 'cancel'})
 
-    def start(self, source, item, roi=None):
+    def start(self, source, item, roi=None, captions=None):
+        source=copy.deepcopy(source)
+        if captions is not None:source['_caption_result']=captions
         material_id = source['_material_id']
         if not self.library.get(material_id)['english']:
             raise ValueError('请先勾选“作为英语学习素材”。')
@@ -91,34 +96,33 @@ class LearningService:
                 check()
                 self._update(material_id, status='running', message='正在检查中英文字幕来源…')
                 old = self.library.document(material_id)
-                if old and old.get('extraction_complete') and old.get('rows') and roi is None:
+                if not source.get('_caption_result') and roi is None and reusable_document(old,float(source.get('duration') or 0),item.get('_transcript_method',source.get('_transcript_method','auto'))):
                     document = old
                 else:
                     document = self._extract(source, item, roi, log, progress, check, cancel)
                 check()
-                missing = [row for row in document['rows'] if not row.get('zh')]
-                if missing:
-                    log(f'英文已保存，正在补译缺少中文的 {len(missing)} 个句段…')
+                missing=[row for row in document['rows'] if not row.get('zh')]
+                pending=[]
+                for row in missing:
+                    saved=self.library.cache_get(cache_key('translation',source['title']+'\n'+row['en']))
+                    if saved:row.update(zh=saved['zh'],zh_origin=saved['origin'])
+                    else:pending.append(row)
+                cached_count=len(missing)-len(pending)
+                if cached_count:self.library.save_document(material_id,document)
+                if pending:
+                    log(f'英文字幕已保存，正在补译缺少中文的 {len(pending)} 个句段…')
                     with ModelClient(log) as model:
-                        for offset in range(0, len(missing), 3):
+                        for offset,batch in translation_batches(pending):
                             check()
-                            batch = missing[offset:offset + 3]
-                            uncached = []
+                            translations=model.translate(batch,source['title'])
                             for row in batch:
-                                saved = self.library.cache_get(cache_key('translation', source['title'] + '\n' + row['en']))
-                                if saved:
-                                    row.update(zh=saved['zh'], zh_origin=saved['origin'])
-                                else: uncached.append(row)
-                            if uncached:
-                                translations = model.translate(uncached, source['title'])
-                                for row in uncached:
-                                    row.update(zh=translations[row['id']], zh_origin=model.label)
-                                    self.library.cache_put(cache_key('translation', source['title'] + '\n' + row['en']),
-                                                           {'zh': row['zh'], 'origin': model.label})
-                            document['status_label'] = f'正在补译中文：{min(offset + 3, len(missing))}/{len(missing)}'
-                            self.library.save_document(material_id, document)
-                            self._update(material_id, message=document['status_label'], done=min(offset + 3, len(missing)), total=len(missing))
-                document.update(status='ready', status_label='已生成；画面识别与模型内容可对照原片校对', sample=False)
+                                row.update(zh=translations[row['id']],zh_origin=model.label)
+                                self.library.cache_put(cache_key('translation',source['title']+'\n'+row['en']),{'zh':row['zh'],'origin':model.label})
+                            done=cached_count+offset+len(batch)
+                            document['status_label']=f'正在补译中文：{done}/{len(missing)}'
+                            self.library.save_document(material_id,document)
+                            self._update(material_id,message=document['status_label'],done=done,total=len(missing))
+                document.update(status='ready', status_label='已生成；字幕识别与模型内容可对照原片校对', sample=False)
                 self.library.save_document(material_id, document)
                 target = self.library.archive_document(material_id, document)
                 self._update(material_id, status='done', message='双语阅读已保存到英语知识库。', path=str(target or ''))
@@ -132,98 +136,28 @@ class LearningService:
             self._update(material_id, status='error', message=str(error)[:500] or '生成未完成，可以继续重试。')
 
     def _extract(self, source, item, roi, log, progress, check, cancel):
-        from media_exports import _fetch_track, _video_for_ocr, _audio_to
-        from transcription import screen_text, transcribe_wav
-        material_id = source['_material_id']
-        folder = self.library.archive_metadata(material_id)
-        work = DATA_ROOT / 'learning-work' / material_id
-        work.mkdir(parents=True, exist_ok=True)
-        english, chinese, origins = [], [], []
-        en_origin = zh_origin = ''
-        def preserve(label, data, suffix='json'):
-            raw = data if isinstance(data, bytes) else data.encode('utf-8')
-            digest = hashlib.sha256(raw).hexdigest()[:12]
-            path = folder / (label + '_' + digest + '.' + suffix)
-            if not path.exists(): path.write_bytes(raw)
-            self.library.add_asset(material_id, 'subtitle', path)
-            return path
-        for prefix in ('en', 'zh'):
-            tracks = [track for track in source.get('subtitles', []) if track.get('language', '').lower().startswith(('zh', 'cmn') if prefix == 'zh' else ('en',))]
-            tracks.sort(key=lambda track: bool(track.get('automatic')))
-            for track in tracks:
-                check()
-                try:
-                    raw = _fetch_track(track)
-                    cues = parse_cues(raw, track.get('ext', 'vtt'))
-                    if not cues: continue
-                    preserve('平台原字幕_' + prefix, raw, track.get('ext', 'vtt') if track.get('ext') in ('vtt','srt','json','json3','ttml','xml','srv1','srv2','srv3') else 'txt')
-                    origin = ('平台自动字幕' if track.get('automatic') else '平台字幕') + '（' + track.get('language', prefix) + '）'
-                    if prefix == 'en': english, en_origin = cues, origin
-                    else: chinese, zh_origin = cues, origin
-                    origins.append(origin); break
-                except (ValueError, OSError): continue
-        if not english or not chinese:
-            video = work / 'frames.mkv'
-            checkpoint_path = work / 'ocr-progress.json'
-            saved = json.loads(checkpoint_path.read_text(encoding='utf-8')) if checkpoint_path.exists() else {}
-            if roi is not None and saved.get('roi')!=roi:saved={}
-            if not video.exists() and not saved.get('complete'):
-                partial = work / 'frames.partial.mkv'
-                try:
-                    _video_for_ocr(source, item, partial, log, progress); partial.replace(video)
-                finally:
-                    partial.unlink(missing_ok=True)
-            check()
-            def checkpoint(events, at, region):
-                expected=float(source.get('duration') or 0)
-                state = {'events': events, 'at': at, 'roi': region, 'complete': expected>0 and at >= expected - .5}
-                temporary = checkpoint_path.with_suffix('.part')
-                temporary.write_text(json.dumps(state, ensure_ascii=False), encoding='utf-8'); temporary.replace(checkpoint_path)
-                en, zh = ocr_languages(events)
-                rows, unmatched = make_rows(english or en, chinese or zh, en_origin or '原视频英文画面字幕识别', zh_origin or '原视频中文画面字幕识别')
-                if rows:
-                    self.library.save_document(material_id, {'status': 'partial', 'status_label': f'画面字幕已处理到 {int(at)//60:02}:{int(at)%60:02}；可先阅读完成部分',
-                        'rows': rows, 'origins': origins + ['原视频中英画面字幕识别（0.4秒采样）'], 'coverage': [[0, at]], 'unmatched_chinese': unmatched})
-            try:
-                if saved.get('complete'):
-                    result = saved
-                else:
-                    result = screen_text(video, roi or saved.get('roi'), log, progress, bilingual=True,
-                        start_at=max(0, saved.get('at', 0) + (.4 if saved.get('events') else 0)),
-                        previous=saved.get('events'), checkpoint=checkpoint, cancel=cancel)
-                    final_state={'events':result['events'],'at':float(source.get('duration') or 0),'roi':result['roi'],'complete':True}
-                    checkpoint_path.write_text(json.dumps(final_state,ensure_ascii=False),encoding='utf-8')
-                en, zh = ocr_languages(result['events'])
-                preserve('原视频画面字幕', json.dumps(result, ensure_ascii=False, indent=2))
-                duration = float(source.get('duration') or 0)
-                coverage = sum(max(0, cue['end'] - cue['start']) for cue in en)
-                if not english and en and (duration <= 0 or coverage > duration * .15): english, en_origin = en, '原视频英文画面字幕识别'
-                if not chinese and zh: chinese, zh_origin = zh, '原视频中文画面字幕识别'
-                origins.append('原视频画面字幕识别（0.4秒采样）')
-            except (ValueError, OSError):
-                if not english: log('未取得足够清晰的英文画面字幕，继续识别英语原声…')
-                else: log('未取得清晰的中文画面字幕，保留英文并补充翻译…')
-            finally:
-                if not cancel.is_set(): video.unlink(missing_ok=True)
-        if not english:
-            audio = work / 'speech.wav'
-            try:
-                _audio_to(source, item, audio, wav=True, log=log, progress=progress)
-                result = transcribe_wav(audio, source.get('title', ''), log, progress, language='en')
-                english = result.get('events') or []
-                preserve('原声英文识别', json.dumps(result, ensure_ascii=False, indent=2))
-                en_origin = '英语原声识别（Whisper large-v3，需校对）'; origins.append(en_origin)
-            finally: audio.unlink(missing_ok=True)
-        if not english: raise ValueError('没有取得可读的英文字幕，未生成学习稿。')
-        rows, unmatched = make_rows(english, chinese, en_origin, zh_origin)
-        old = self.library.document(material_id) or {}
-        previous = {row['en']: row for row in old.get('rows', []) if row.get('analysis')}
+        from subtitle_pipeline import extract_captions
+        material_id=source['_material_id'];check()
+        work=DATA_ROOT/'learning-work'/material_id;work.mkdir(parents=True,exist_ok=True)
+        result=source.get('_caption_result') or extract_captions(source,item,work,log,progress,learning=True,roi=roi,cancel=cancel)
+        if not result.get('english') or not result.get('quality',{}).get('complete'):
+            raise ValueError('未取得完整英语字幕，未标记为提取完成。')
+        folder=self.library.archive_metadata(material_id)
+        for artifact in result.get('artifacts',[]):
+            raw=artifact['text'].encode('utf-8');digest=hashlib.sha256(raw).hexdigest()[:12]
+            suffix=artifact['ext'] if artifact['ext'] in ('json','vtt','srt','json3','ttml','xml','srv1','srv2','srv3','txt') else 'txt'
+            path=folder/(artifact['label']+'_'+digest+'.'+suffix)
+            if not path.exists():path.write_bytes(raw)
+            self.library.add_asset(material_id,'subtitle',path)
+        rows,unmatched=make_rows(result['english'],result['chinese'],result['en_origin'],result['zh_origin'])
+        old=self.library.document(material_id) or {}
+        previous={r['en']:r for r in old.get('rows',[]) if r.get('analysis')}
         for row in rows:
-            if row['en'] in previous: row['analysis'] = previous[row['en']]['analysis']
-        document = {'status': 'partial', 'status_label': '原文已提取，正在检查中文对照', 'rows': rows,
-                    'origins': origins, 'coverage': [[0, source.get('duration')]], 'unmatched_chinese': unmatched,
-                    'extraction_complete': True, 'sample': False}
-        self.library.save_document(material_id, document)
+            if row['en'] in previous:row.update(analysis=previous[row['en']]['analysis'],analysis_origin=previous[row['en']].get('analysis_origin','已保存解析'))
+        document={'status':'partial','status_label':'原文已提取，正在检查中文对照','rows':rows,'origins':result['origins'],
+                  'coverage':[[0,source.get('duration')]],'unmatched_chinese':unmatched,'extraction_complete':True,
+                  'extraction_version':2,'extraction_method':result['method'],'quality':result['quality'],'sample':False}
+        self.library.save_document(material_id,document)
         return document
 
     @staticmethod

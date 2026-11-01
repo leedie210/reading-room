@@ -12,5 +12,9 @@ jobs:
           python-version: '3.13'
       - run: python -m pip install -r requirements-tested.txt
       - run: python -m compileall -q local_tool scripts run.py
-      - run: python -m unittest test_learning test_preview test_video_app test_analysis_jobs test_reading_marks -q
+      - run: python -m unittest test_learning test_preview test_video_app test_analysis_jobs test_reading_marks test_subtitle_pipeline -q
         working-directory: local_tool
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node local_tool/test_transcript_action.cjs
