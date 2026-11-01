@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>双语阅读</title>
+<style>
+:root{color-scheme:light;--ink:#20334b;--muted:#63758b;--blue:#245fe5;--line:#dfe6ee}*{box-sizing:border-box}[hidden]{display:none!important}body{margin:0;background:#f4f6f9;color:var(--ink);font:16px/1.75 "Microsoft YaHei",system-ui,sans-serif}main{max-width:1060px;margin:auto;padding:30px 26px 70px}h1{font-size:28px;line-height:1.5;margin:10px 0 16px}a{color:var(--blue)}button,.button{font:inherit;cursor:pointer;border:1px solid var(--line);border-radius:8px;padding:8px 14px;background:white;color:var(--ink);text-decoration:none}button:hover,.button:hover{border-color:var(--blue)}button:disabled{opacity:.5;cursor:default}button.primary,.current{background:var(--blue);color:white}.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.muted{font-size:13px;color:var(--muted)}nav{display:flex;gap:8px;border-bottom:1px solid var(--line);padding-bottom:15px;margin-bottom:18px}.notice{padding:10px 14px;background:#eaf0ff;border-left:3px solid #86a8fa;border-radius:0 6px 6px 0;font-size:14px;margin:12px 0}.controls,.generation{background:white;border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin-bottom:16px}.controls{position:sticky;top:0;z-index:2}.controls label,.generation label{display:inline-flex;gap:7px;align-items:center;cursor:pointer}input[type=checkbox]{width:17px;height:17px;accent-color:var(--blue)}select,input[type=search]{font:inherit;padding:7px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink)}input[type=search]{max-width:260px}.sentence{padding:22px 25px;background:white;border:1px solid var(--line);border-radius:12px;margin-bottom:12px}.en{font:21px/1.85 Georgia,"Times New Roman",serif;margin:0;white-space:pre-wrap}.zh{font-size:16px;color:#52677f;line-height:1.9;white-space:pre-wrap;margin:12px 0 4px}.foot{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:15px}.small{font-size:13px;padding:4px 10px}.mark{padding:1px 2px;border-radius:3px;color:inherit;cursor:help}.phrase{background:#fff0b3}.word{background:#e3edff}.legend{font-size:13px;color:var(--muted);margin:6px 0}progress{width:100%;height:8px;accent-color:var(--blue)}dialog{border:1px solid var(--line);border-radius:15px;width:min(780px,92vw);max-height:85vh;padding:25px;color:var(--ink)}dialog::backdrop{background:#17253f80}dialog h2{font-size:20px;margin:0}.dialog-head{display:flex;justify-content:space-between;gap:20px;align-items:center}.quote{font:19px/1.8 Georgia,serif;background:#f4f6f9;padding:14px;border-radius:8px}#analysis-text{white-space:pre-wrap;line-height:1.95}.pager{display:flex;justify-content:center;align-items:center;gap:18px;margin:20px 0}.sources{font-size:13px;color:var(--muted);overflow-wrap:anywhere}#empty{text-align:center;padding:45px;color:var(--muted)}@media(max-width:650px){main{padding:18px 12px}.sentence{padding:17px}.en{font-size:19px}h1{font-size:23px}.controls{position:static}}
+
+.reader-layout{display:grid;grid-template-columns:230px minmax(0,1060px);max-width:1350px;margin:auto;padding:0 16px;gap:8px}.reader-layout main{width:100%;min-width:0;margin:0}.sentence-sidebar{position:sticky;top:18px;align-self:start;margin-top:30px;background:white;border:1px solid var(--line);border-radius:10px;padding:12px 8px}.sentence-sidebar h2{font-size:16px;margin:0 8px 4px}.sentence-sidebar .muted{margin:0 8px 8px}#sentence-directory{max-height:calc(100vh - 155px);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}.index-entry{display:grid;grid-template-columns:34px minmax(0,1fr);gap:7px;width:100%;border:0;background:transparent;padding:9px 8px;text-align:left;line-height:1.55;font-size:13px;border-radius:6px}.index-number{font-variant-numeric:tabular-nums;color:var(--muted)}.index-excerpt{overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow-wrap:anywhere}.index-entry:hover,.index-entry[aria-current="location"]{background:#eaf0ff}.index-entry[aria-current="location"] .index-number{color:var(--blue);font-weight:700}.sentence-number{color:var(--blue);font-size:13px;font-variant-numeric:tabular-nums;margin-bottom:8px}@media(max-width:900px){.reader-layout{grid-template-columns:185px minmax(0,1fr);padding:0 8px;gap:0}.reader-layout main{padding-left:16px;padding-right:16px}}@media(max-width:650px){.reader-layout{display:block;padding:0 12px}.reader-layout main{padding-left:0;padding-right:0}.sentence-sidebar{position:static;margin-top:18px}#sentence-directory{max-height:180px}}
+.reader-layout[data-directory-collapsed="true"]{grid-template-columns:minmax(0,1060px);max-width:1092px}
+</style><link rel="stylesheet" href="reading-room.css">
+<header class="room-top"><a class="room-brand" href="shelf">阅读书房<small>THE READING ROOM</small></a><div class="room-nav"><a href="shelf">我的书架</a><a href="shelf?view=word">重点词汇</a><a href="shelf?view=sentence">标记句段</a></div></header><div class="reader-layout" id="reader-layout"><aside class="sentence-sidebar" id="sentence-sidebar" aria-label="原文句段目录"><h2>原文目录</h2><p class="muted" id="directory-count">正在读取…</p><nav id="sentence-directory" aria-label="句段导航" style="display:block;border:0;padding:0;margin:0"></nav></aside><main><div class="muted" id="platform">英语学习素材</div><h1 id="title">正在读取…</h1>
+<nav aria-label="素材页面"><a class="button" href="./">视频</a><span class="button current">阅读</span><a id="original" style="margin-left:auto;align-self:center;font-size:14px" target="_blank" rel="noreferrer">原视频 ↗</a></nav>
+<details class="generation"><summary>字幕与解析</summary><div class="row"><label><input type="checkbox" id="english">作为英语学习素材</label><button id="generate" class="primary">生成／继续双语阅读</button><button id="cancel" hidden>停止并保留进度</button><button id="preanalyze" disabled>提前生成本篇解析</button></div><p class="muted">优先保留原视频中英字幕；中文在画面里时读取原译文，缺少的部分再翻译。字幕框选位置可在视频页设置。</p><progress id="progress" value="0" max="100" hidden></progress><div id="status" role="status" class="muted"></div><div id="analysis-progress" role="status" class="muted"></div></details>
+<p id="document-note" class="notice" hidden></p>
+<section class="controls"><div class="row"><button id="toggle-directory" type="button" aria-controls="sentence-sidebar" aria-expanded="true">收起目录</button><label><input type="checkbox" id="show-zh" checked>中文对照</label><label><input type="checkbox" id="show-phrases">进阶短语与语境词</label><label>词汇标记<select id="vocab" aria-label="词汇标记"><option value="none">关闭</option><option value="ielts">雅思参考词表</option><option value="cet6">六级参考词表</option><option value="tem8">专八参考词表</option><option value="all">全部参考词表</option></select></label><input id="search" type="search" placeholder="查找英文或中文" aria-label="查找英文或中文"></div><div class="legend" id="legend">标记是学习参考，词表来源与版本见页尾。鼠标停在标记上可查看释义。</div></section>
+<div id="empty">还没有这条视频的阅读文本。勾选英语学习后，可生成并保存到知识库。</div><div id="sentences"></div>
+<div class="pager" id="pager" hidden><button id="previous">上一页</button><span id="page-label"></span><button id="next">下一页</button></div>
+<details id="unmatched" class="sources" hidden><summary>原中文字幕（尚未对齐）</summary><p>保留原译文，不按行号强行对应英文。</p><div id="unmatched-text"></div></details>
+<details class="sources"><summary>字幕与词表来源</summary><div id="sources"></div></details>
+</main></div><dialog id="analysis"><div class="dialog-head"><h2>句子解析</h2><button id="close-analysis" aria-label="关闭句子解析">关闭</button></div><p id="analysis-en" class="quote"></p><p id="analysis-origin" class="muted"></p><div id="analysis-text"></div></dialog>
+<script>
+const $=id=>document.getElementById(id),esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let data=null,page=0,pageSize=35,lastSignature='',polling=false,analysisTimer=null,activeAnalysisId=null,analysisRequest=0,preferenceKey='',notices='',directoryCollapsed=true;
+const readingParams=new URLSearchParams(location.search);
+let resumeRow=readingParams.get('row'),selectedRow=resumeRow,directorySignature='',sentenceNumbers=new Map();
+if(resumeRow)$('search').value=readingParams.get('q')||'';
+function playHref(row){const params=new URLSearchParams({t:String(Number(row.start)),'reading-row':String(row.id)});if($('search').value)params.set('reading-search',$('search').value);return './?'+params;}
+function restoreParagraph(){if(resumeRow===null)return;const target=document.getElementById('row-'+resumeRow);if(!target)return;resumeRow=null;requestAnimationFrame(()=>{const controls=document.querySelector('.controls'),inset=getComputedStyle(controls).position==='sticky'?controls.getBoundingClientRect().height+16:16;window.scrollTo({top:Math.max(0,window.scrollY+target.getBoundingClientRect().top-inset),behavior:'auto'});});}
+const tags={ielts:'雅思参考',cet6:'六级参考',tem8:'专八参考'};
+function tell(text){$('status').textContent=text;}
+function stamp(t){if(t===null||t===undefined)return '无时间轴';const s=Math.max(0,Math.floor(t));return `${Math.floor(s/60).toString().padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;}
+async function post(route,body={}){const response=await fetch(route,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(!response.ok)throw Error(await response.text());return response.json();}
+function preference(){if(!preferenceKey)return;try{localStorage.setItem(preferenceKey,JSON.stringify({zh:$('show-zh').checked,phrases:$('show-phrases').checked,vocab:$('vocab').value,directoryCollapsed}));}catch(e){}}
+function setDirectoryCollapsed(collapsed){
+ directoryCollapsed=collapsed;
+ $('sentence-sidebar').hidden=collapsed;
+ $('reader-layout').setAttribute('data-directory-collapsed',String(collapsed));
+ $('toggle-directory').textContent=collapsed?'展开目录':'收起目录';
+ $('toggle-directory').setAttribute('aria-expanded',String(!collapsed));
+}
+$('toggle-directory').onclick=()=>{setDirectoryCollapsed(!directoryCollapsed);preference();};setDirectoryCollapsed(true);
+function mark(row){
+ const mode=$('vocab').value,phrase=$('show-phrases').checked,chosen=[],chars=Array.from(row.en),position=n=>chars.slice(0,n).join('').length;
+ for(const item of (row.annotations||[]).map(x=>({...x,start:position(x.start),end:position(x.end)})).filter(x=>x.kind==='phrase'?phrase:mode!=='none'&&(mode==='all'||x.tags.includes(mode))).sort((a,b)=>a.start-b.start||(a.kind===b.kind?b.end-a.end:a.kind==='phrase'?-1:1))){if(!chosen.length||item.start>=chosen[chosen.length-1].end)chosen.push(item);}
+ const personal=(data?.marks||[]).filter(m=>m.row_id===row.id&&m.valid!==false&&m.context===row.en).map(m=>({start:chars.slice(0,m.start).join('').length,end:chars.slice(0,m.end).join('').length}));
+ const cuts=[...new Set([0,row.en.length,...chosen.flatMap(x=>[x.start,x.end]),...personal.flatMap(x=>[x.start,x.end])])].sort((a,b)=>a-b);
+ let out='';for(let i=1;i<cuts.length;i++){
+  const start=cuts[i-1],end=cuts[i],item=chosen.find(x=>x.start<=start&&x.end>=end),saved=personal.some(x=>x.start<=start&&x.end>=end),text=esc(row.en.slice(start,end));
+  if(!item&&!saved){out+=text;continue;}
+  const level=item?.kind==='word'?(item.tags||[]).map(t=>tags[t]||t).join('／')+(item.inferred_form?' · 可能词形 '+item.lemma:''):'';
+  const title=[saved?'我的标记':'',item?.meaning,level,item?.source].filter(Boolean).join('｜');
+  out+=`<mark class="mark ${item?.kind||''} ${saved?'user-mark':''}" title="${esc(title)}">${text}</mark>`;
+ }return out;
+}
+function filtered(){const needle=$('search').value.trim().toLowerCase();return (data?.document?.rows||[]).filter(r=>!needle||(r.en+' '+r.zh).toLowerCase().includes(needle));}
+function sentenceNumber(id){return String(sentenceNumbers.get(String(id))||'').padStart(3,'0');}
+function jumpToSentence(id){selectedRow=String(id);resumeRow=String(id);render();}
+function renderDirectory(rows){
+ const total=data.document?.rows?.length||0;
+ $('directory-count').textContent=rows.length===total?`${total} 个句段 · 点击跳转`:`找到 ${rows.length} / ${total} 个句段`;
+ const signature=JSON.stringify(rows.map(r=>[r.id,sentenceNumber(r.id),r.en]));
+ if(signature!==directorySignature){
+  directorySignature=signature;
+  $('sentence-directory').innerHTML=rows.map(r=>`<button type="button" class="index-entry" data-jump="${esc(r.id)}" title="${esc(r.en)}"><span class="index-number">${sentenceNumber(r.id)}</span><span class="index-excerpt" lang="en">${esc(r.en)}</span></button>`).join('');
+  document.querySelectorAll('[data-jump]').forEach(button=>button.onclick=()=>jumpToSentence(button.dataset.jump));
+ }
+ document.querySelectorAll('[data-jump]').forEach(button=>{if(button.dataset.jump===selectedRow)button.setAttribute('aria-current','location');else button.removeAttribute('aria-current');});
+}
+function render(){if(!data)return;sentenceNumbers=new Map((data.document?.rows||[]).map((row,index)=>[String(row.id),index+1]));$('unmatched').hidden=!$('show-zh').checked||!data.document?.unmatched_chinese?.length;$('unmatched-text').innerHTML=(data.document?.unmatched_chinese||[]).map(c=>`<p>${stamp(c.start)} · ${esc(c.text)}</p>`).join('');const rows=filtered(),resumeIndex=resumeRow===null?-1:rows.findIndex(r=>String(r.id)===resumeRow);if(resumeIndex>=0)page=Math.floor(resumeIndex/pageSize);const count=Math.max(1,Math.ceil(rows.length/pageSize));page=Math.max(0,Math.min(page,count-1));const shown=rows.slice(page*pageSize,(page+1)*pageSize);$('empty').hidden=rows.length>0;$('empty').textContent=$('search').value?'没有找到对应文字。':'还没有阅读文本。勾选英语学习后，可以生成并保存到知识库。';const busy=['queued','running'].includes(data.job.status);$('sentences').innerHTML=shown.map(r=>`<article class="sentence" id="row-${esc(r.id)}" data-row="${esc(r.id)}"><div class="sentence-number" aria-label="句段编号">#${sentenceNumber(r.id)}</div><p class="en" lang="en">${mark(r)}</p><p class="zh" ${$('show-zh').checked?'':'hidden'}>${esc(r.zh||'（中文待补充）')}</p><p class="muted" ${$('show-zh').checked?'':'hidden'}>${esc(r.zh_origin||'')}</p><div class="foot"><span class="muted">${stamp(r.start)} · ${esc(r.en_origin||'原字幕')}</span>${r.start!==null&&r.start!==undefined?`<a class="button small" href="${esc(playHref(r))}">从这一句播放</a>`:''}<button class="small" data-analyze="${esc(r.id)}" ${busy&&!r.analysis?'disabled':''}>${r.analysis?'查看句段解析':busy?'生成完成后解析':['queued','running'].includes(r.analysis_status)?'解析生成中…':'解析这个句段'}</button></div></article>`).join('');document.querySelectorAll('[data-analyze]').forEach(button=>button.onclick=()=>analyze(button.dataset.analyze));$('pager').hidden=rows.length<=pageSize;$('page-label').textContent=`${page+1} / ${count} · ${rows.length} 个句段`;$('previous').disabled=page===0;$('next').disabled=page+1===count;renderDirectory(rows);restoreParagraph();}
+async function refresh(){if(polling)return;polling=true;try{const response=await fetch('reading-data');if(!response.ok)throw Error('阅读服务暂不可用，请从工具的素材历史重新打开。');const latest=await response.json();data=latest;$('title').textContent=data.material.title;document.title=data.material.title+' · 双语阅读';$('platform').textContent=data.material.platform+' · 英语学习素材';if(data.material.source_url){$('original').href=data.material.source_url;$('original').hidden=false;}else $('original').hidden=true;$('english').checked=data.material.english;const busy=['queued','running'].includes(data.job.status);$('generate').disabled=busy||!data.material.english;$('generate').textContent=data.document?.extraction_complete&&data.document?.status==='ready'?'已生成双语阅读':'生成／继续双语阅读';$('cancel').hidden=!busy;$('progress').hidden=!busy;if(data.job.total>0)$('progress').value=Math.min(100,data.job.done/data.job.total*100);if(!notices)tell(data.job.message||'勾选后，字幕和学习资料会归档到英语知识库。');$('document-note').hidden=!data.document;$('document-note').textContent=data.document?.status_label||'';const key='english-reader:'+data.material.id;if(preferenceKey!==key){preferenceKey=key;try{const saved=JSON.parse(localStorage.getItem(key)||'null');if(saved){$('show-zh').checked=saved.zh;$('show-phrases').checked=saved.phrases;$('vocab').value=saved.vocab||'none';setDirectoryCollapsed(saved.directoryCollapsed!==false);}}catch(e){}}$('sources').innerHTML='<p>'+esc((data.document?.origins||[]).join('；'))+'</p>'+data.wordlists.map(s=>`<p>${esc(tags[s.tag]||s.tag)}：${esc(s.book)} · ${s.count}词 · 版本 ${esc(s.revision.slice(0,12))} <a href="${esc(s.source)}" target="_blank" rel="noreferrer">来源</a></p>`).join('')+'<p>词表释义与难度仅作参考；原视频译文、画面识别和模型补译分别标明。未匹配到不代表不属于考试范围。</p>';updateAnalysisProgress(busy);const signature=JSON.stringify([data.document?.updated,(data.marks||[]).map(m=>[m.id,m.valid]),(data.document?.rows||[]).map(r=>[r.id,!!r.analysis,r.analysis_status]),busy,data.material.id]);if(signature!==lastSignature){lastSignature=signature;render();}}catch(e){tell(e.message);}finally{polling=false;}}
+$('english').onchange=async()=>{try{await post('classify',{english:$('english').checked});notices='';await refresh();}catch(e){tell(e.message);}};
+$('generate').onclick=async()=>{try{let roi=null;try{roi=JSON.parse(sessionStorage.getItem('subtitle-roi:'+data.material.id)||'null');}catch(e){}await post('learning-start',{roi});notices='';lastSignature='';await refresh();}catch(e){tell(e.message);}};
+$('cancel').onclick=async()=>{try{await post('learning-cancel');tell('正在停止，已完成部分会保留。');}catch(e){tell(e.message);}};
+for(const id of ['show-zh','show-phrases','vocab'])$(id).onchange=()=>{preference();render();};$('search').oninput=()=>{page=0;render();};$('previous').onclick=()=>{page--;render();};$('next').onclick=()=>{page++;render();};
+function updateAnalysisProgress(readingBusy){
+ const job=data.analysis_job||{},total=job.total??data.document?.rows?.length??0,done=job.done??0,busy=['queued','running'].includes(job.status),complete=total>0&&done===total;
+ $('preanalyze').disabled=readingBusy||busy||!total||complete;
+ $('preanalyze').textContent=complete?'本篇解析已生成':busy?'正在生成本篇解析':['paused','error'].includes(job.status)||done>0?'继续生成本篇解析':'提前生成本篇解析';
+ $('analysis-progress').textContent=job.message||(done>0?`解析已保存 ${done}/${total}。`:'');
+}
+$('preanalyze').onclick=async()=>{
+ $('preanalyze').disabled=true;let problem='';
+ try{const result=await post('analyze-all');if(result.status==='error')problem=result.message;else await refresh();}
+ catch(e){problem=e.message;}
+ finally{if(data)updateAnalysisProgress(['queued','running'].includes(data.job.status));if(problem)$('analysis-progress').textContent=problem;}
+};
+function currentAnalysis(id,request){return $('analysis').open&&activeAnalysisId===id&&analysisRequest===request;}
+async function analyze(id){
+ const row=data.document.rows.find(r=>r.id===id);if(!row)return;
+ clearTimeout(analysisTimer);activeAnalysisId=id;const request=++analysisRequest;
+ $('analysis-en').textContent=row.en;$('analysis-text').textContent='正在准备解析…';$('analysis-origin').textContent=data.provider;$('analysis').showModal();
+ if(row.analysis){showAnalysis({status:'done',analysis:row.analysis,origin:row.analysis_origin},id,request);return;}
+ try{showAnalysis(await post('analyze',{row:id}),id,request);}
+ catch(e){if(currentAnalysis(id,request))$('analysis-text').textContent=e.message;}
+}
+function showAnalysis(result,id,request){
+ if(!currentAnalysis(id,request))return;
+ if(result.status==='done'){
+  $('analysis-text').textContent=result.analysis;$('analysis-origin').textContent=result.origin||'模型生成，需校对';
+  const row=data.document.rows.find(r=>r.id===id);if(row){row.analysis=result.analysis;row.analysis_origin=result.origin;row.analysis_status='done';}
+ }else if(['error','paused'].includes(result.status))$('analysis-text').textContent=result.message;
+ else{
+  $('analysis-text').textContent=(result.message||'正在分析，请稍候…')+'\n关闭此窗口后仍会在后台继续，完成后自动保存。';
+  analysisTimer=setTimeout(async()=>{
+   if(!currentAnalysis(id,request))return;
+   try{const response=await fetch('analysis-status?row='+encodeURIComponent(id));if(!response.ok)throw Error();showAnalysis(await response.json(),id,request);}
+   catch(e){if(currentAnalysis(id,request))$('analysis-text').textContent='连接暂时中断，后台任务会继续；可关闭后重试。';}
+  },1500);
+ }
+}
+$('close-analysis').onclick=()=>$('analysis').close();
+$('analysis').addEventListener('close',()=>{clearTimeout(analysisTimer);activeAnalysisId=null;analysisRequest++;});
+refresh();setInterval(refresh,2500);
+</script><div id="selection-tools" class="selection-tools" hidden><span id="selection-text"></span><button id="save-word" type="button">标红 · 存为词汇</button><button id="save-sentence" type="button">标红 · 存为句段</button></div><div id="mark-notice" class="mark-notice" role="status" hidden></div><script src="reading-selection.js"></script></html>

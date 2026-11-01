@@ -1,0 +1,5 @@
+yt-dlp[default]>=2026.8.19,<2027
+imageio-ffmpeg>=0.6,<0.7
+numpy>=2,<3
+opencc-python-reimplemented>=0.1.7,<0.2
+pypinyin>=0.55,<0.56

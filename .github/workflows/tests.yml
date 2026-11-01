@@ -1,0 +1,16 @@
+name: Windows checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: python -m pip install -r requirements-tested.txt
+      - run: python -m compileall -q local_tool scripts run.py
+      - run: python -m unittest test_learning test_preview test_video_app test_analysis_jobs test_reading_marks -q
+        working-directory: local_tool
